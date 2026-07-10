@@ -20,7 +20,7 @@ from src.classifier.train import train_epoch, evaluate
 DATASET_ROOT = 'data/raw/TAU-urban-acoustic-scenes-2022-mobile-development'
 TRAIN_CSV    = os.path.join(DATASET_ROOT, 'evaluation_setup/fold1_train.csv')
 VAL_CSV      = os.path.join(DATASET_ROOT, 'evaluation_setup/fold1_evaluate.csv')
-AUDIO_DIR    = os.path.join(DATASET_ROOT, 'audio')
+AUDIO_DIR    = DATASET_ROOT
 
 BATCH_SIZE   = 64
 EPOCHS       = 50
