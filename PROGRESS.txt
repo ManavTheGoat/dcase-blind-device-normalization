@@ -1,0 +1,201 @@
+================================================================================
+  DCASE BLIND DEVICE NORMALIZATION — PROJECT PROGRESS TRACKER
+  Repo: https://github.com/ManavTheGoat/dcase-blind-device-normalization
+  Last updated: 2026-07-10
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  MASTER PROMPT (paste this into a new Claude Code session to resume)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+I am a Data Science student at Plaksha University (graduating July 2026)
+targeting European Masters/PhD programs (Netherlands, Austria, Germany, Italy,
+France, Spain) for Winter 2027 entry. My mentor is Prof Srikant (CS PhD,
+signal processing) who is co-author on this paper.
+
+We are working on a research paper for DCASE 2026 Workshop / ICASSP 2027:
+"Blind Device Normalization for Acoustic Scene Classification"
+
+The idea: train a lightweight residual CNN (DevNormNet, ~8K params) to map any
+microphone's mel spectrogram toward a reference device (Device A) using paired
+simulated device clips as supervision. At inference, apply blindly to unseen
+real devices B and C — zero-shot device normalization.
+
+Project is at: /home/manav-chad/PAPERS/DCASE Acoustic Scene Classification/
+GitHub repo:   https://github.com/ManavTheGoat/dcase-blind-device-normalization
+Dataset at:    /home/manav-chad/PAPERS/DCASE Acoustic Scene Classification/data/raw/TAU-urban-acoustic-scenes-2022-mobile-development/
+Python env:    /home/manav-chad/miniconda3/envs/dcase/bin/python
+
+Read PROGRESS.txt in the repo root for a full status update, then continue
+from the next pending task.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PROJECT OVERVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Problem:
+  Acoustic Scene Classification (ASC) models trained on professional microphone
+  (Device A) degrade on consumer microphones (Devices B, C) due to device
+  mismatch in frequency response. DCASE 2025 Task 1 highlights this — model
+  must be <128K parameters and handle multiple devices.
+
+Our contribution:
+  1. We PROVE simple hand-crafted signal features (spectral centroid, rolloff,
+     noise floor, flatness, HF ratio) CANNOT separate devices — scene content
+     variance dominates (Figure 11: PCA shows complete mixing).
+  2. We PROPOSE DevNormNet: a residual CNN trained on paired (Si, A) clips
+     to learn and invert device-specific frequency distortions.
+  3. We show transfer functions are consistent across scenes (learnable),
+     unlike unstructured scene content noise (Figures 13, 14).
+  4. At inference: DevNormNet is applied blind (no device label needed).
+
+Dataset:
+  TAU Urban Acoustic Scenes 2022 Mobile — 230,350 WAV clips, 10 scene classes,
+  12 European cities, devices A/B/C/S1-S6 (simulated from A via known filters).
+  Device A: 144,000 clips | S1-S6: ~10,800 each | B: 10,780 | C: 10,770
+  Key insight: every Si clip has an EXACT Device A counterpart (same filename,
+  different suffix) → perfect paired training data.
+
+Paper title (working): "Blind Device Normalization for Low-Complexity Acoustic
+  Scene Classification Using Simulated Device Pairs"
+Target venues: DCASE 2026 Workshop (primary) / ICASSP 2027 (stretch)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DevNormNet (~8K params)  [src/normalization/devnorm.py]
+  Input: mel spectrogram (1, 128, T)
+  → Conv2d(1→8) + BN + ReLU
+  → ResBlock × 2
+  → Conv2d(8→1)   [residual connection: output = input + correction]
+  Output: normalized mel spectrogram (same shape)
+  Loss: L1 on mel-dB scale, trained on paired (Si, A) clips
+
+CPMobile (~10K params)  [src/classifier/model.py]
+  Input: normalized mel spectrogram
+  → DepthwiseSeparableConv × 3
+  → AdaptiveAvgPool2d(1)
+  → Linear → 10 classes
+  
+Total pipeline: ~18K params (well under 128K DCASE limit)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  REPO STRUCTURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+src/
+  utils/dataset.py          — TAUDataset PyTorch loader
+                              NOTE: AUDIO_DIR = DATASET_ROOT (not .../audio/)
+                              because meta.csv filenames include audio/ prefix
+  signal_features/extractor.py  — 5 hand-crafted features (ablation only)
+  classifier/model.py       — CPMobile (DepthwiseSeparable CNN)
+  classifier/train.py       — train_epoch() and evaluate()
+  normalization/devnorm.py  — DevNormNet + PairedDataset
+
+experiments/
+  run_baseline.py           — Train CPMobile alone, target 50.72% accuracy
+  train_devnorm.py          — Phase 1: train DevNormNet on paired (Si,A) clips
+  run_full_pipeline.py      — Phase 2: frozen DevNormNet + CPMobile
+
+notebooks/
+  01_explore_dataset.ipynb  — Dataset EDA, 11 figures, proved features fail
+  02_paired_device_analysis.ipynb — Paired analysis, figures 12-14, proves
+                                    transfer functions are learnable
+
+figures/ (14 total)
+  01-11  — From notebook 01 (dataset EDA + feature analysis)
+  12     — Paired spectrogram: Device A vs S1 vs difference map
+  13     — Transfer functions per device (mean ± std, 50 clips)
+  14     — Paired vs unpaired variance (KEY motivation figure)
+
+results/  (populated after training)
+  best_model_baseline.pt    — best CPMobile checkpoint (baseline)
+  best_model_devnorm.pt     — best DevNormNet checkpoint
+  best_model_pipeline.pt    — best full pipeline checkpoint
+  training_log_*.json       — epoch-by-epoch accuracy logs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  COMPLETED TASKS  [✓]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[✓] Project setup — directory structure, requirements.txt, .gitignore
+[✓] Dataset download — 230,350 WAV files (TAU Urban Acoustic Scenes 2022 Mobile)
+[✓] GitHub repo created — https://github.com/ManavTheGoat/dcase-blind-device-normalization
+[✓] Notebook 01 — EDA with 11 figures, discovered features cannot separate devices
+[✓] Identified pivot — use simulated device pairs (S1-S6) instead of features
+[✓] CPMobile model — DepthwiseSeparable CNN, 10,186 params, <128K limit
+[✓] DevNormNet — Residual CNN, ~8K params, learns to normalize mel spectrograms
+[✓] PairedDataset — pairs Si clips with Device A counterparts by base filename
+[✓] train_devnorm.py — Phase 1 training script (L1 loss, 30 epochs)
+[✓] run_full_pipeline.py — Phase 2: frozen DevNormNet + CPMobile
+[✓] Notebook 02 — 3 new paper figures (12, 13, 14) proving method motivation
+[✓] All code pushed to GitHub (commit 92d51d2)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  IN PROGRESS  [~]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[~] Baseline training — running now (2026-07-10)
+      Command: python experiments/run_baseline.py
+      Log: /home/manav-chad/.claude/jobs/76325a16/tmp/baseline_log.txt
+      Target: 50.72% val accuracy (DCASE 2025 official baseline)
+      Expected duration: 2-4 hours on CPU
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PENDING TASKS  [ ]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] Record baseline result — update this file with final val accuracy %
+[ ] Phase 1: train DevNormNet
+      Command: python experiments/train_devnorm.py
+      Saves to: results/devnorm_best.pt
+[ ] Phase 2: run full pipeline
+      Command: python experiments/run_full_pipeline.py
+      Saves to: results/best_model_pipeline.pt
+[ ] Record full pipeline accuracy — fill results table below
+[ ] Write ablation: device-wise accuracy breakdown (A vs B/C vs S1-S6)
+[ ] Notebook 03 — post-training analysis:
+      - Before vs after normalization spectrogram comparison
+      - Per-device accuracy breakdown bar chart
+      - Confusion matrix for scene classes
+[ ] Draft paper sections (in order):
+      Section 1: Introduction
+      Section 2: Related Work (cite DCASE 2025 baseline, City2Scene, KD papers)
+      Section 3: Why Features Fail (negative result — use Figs 11, 14)
+      Section 4: Method — DevNormNet (use Figs 12, 13)
+      Section 5: Experiments + Results table
+      Section 6: Conclusion
+[ ] Cold email campaign — identify 5-10 DCASE/audio ML professors in EU
+      (TU Delft, KTH, Tampere, TU Berlin, Aalto University)
+[ ] Upload preprint to arXiv
+[ ] Submit to DCASE 2026 Workshop (deadline TBD — check dcase.community)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RESULTS TABLE  (fill as experiments complete)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Method                         | Params  | Val Acc  | Device B | Device C
+-------------------------------|---------|----------|----------|---------
+DCASE 2025 official baseline   | —       | 50.72%   | —        | —
+CPMobile (our baseline)        | 10,186  | PENDING  | PENDING  | PENDING
+CPMobile + signal features     | 10,236  | PENDING  | PENDING  | PENDING
+DevNormNet + CPMobile (ours)   | ~18K    | PENDING  | PENDING  | PENDING
+Oracle (trained w/ device label)| ~18K   | PENDING  | PENDING  | PENDING
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  KEY TECHNICAL NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- AUDIO_DIR must be DATASET_ROOT (not DATASET_ROOT/audio/) because meta.csv
+  and evaluation_setup CSVs store filenames as "audio/xxx.wav" already.
+- PairedDataset base_key: strip "audio/" prefix, strip ".wav", then drop the
+  last "-{device}" segment. Example: "audio/airport-lisbon-0-0-s1.wav" → 
+  "airport-lisbon-0-0". Device A counterpart: "audio/airport-lisbon-0-0-a.wav"
+- DevNormNet uses residual connection: output = input + learned_correction
+  This is important — the network only needs to learn the delta, not reconstruct
+  the full spectrogram from scratch.
+- DCASE limit is 128,000 TOTAL parameters (DevNormNet + classifier combined).
+  Our pipeline: ~8K + ~10K = ~18K. Plenty of headroom.
+
+================================================================================
