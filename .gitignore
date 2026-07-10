@@ -1,0 +1,9 @@
+data/raw/
+*.wav
+*.flac
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.egg-info/
+.env
+results/*.pkl

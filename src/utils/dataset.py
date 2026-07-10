@@ -1,0 +1,58 @@
+import os
+import pandas as pd
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+import librosa
+
+
+SCENE_CLASSES = [
+    'airport', 'bus', 'metro', 'metro_station', 'park',
+    'public_square', 'shopping_mall', 'street_pedestrian',
+    'street_traffic', 'tram'
+]
+
+DEVICE_CLASSES = ['a', 'b', 'c', 's1', 's2', 's3', 's4', 's5', 's6']
+
+
+class TAUDataset(Dataset):
+    """TAU Urban Acoustic Scenes 2022 Mobile dataset loader."""
+
+    def __init__(self, meta_csv, audio_dir, sr=22050, n_mels=128, duration=1.0):
+        self.df = pd.read_csv(meta_csv, sep='\t')
+        # meta.csv filenames already include 'audio/' prefix, so audio_dir = dataset root
+        self.audio_dir = audio_dir
+        self.sr = sr
+        self.n_mels = n_mels
+        self.n_samples = int(sr * duration)
+        self.scene2idx = {s: i for i, s in enumerate(SCENE_CLASSES)}
+        self.device2idx = {d: i for i, d in enumerate(DEVICE_CLASSES)}
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        filepath = os.path.join(self.audio_dir, row['filename'])
+
+        audio, _ = librosa.load(filepath, sr=self.sr, mono=True, duration=1.0)
+
+        # Pad or trim to exactly 1 second
+        if len(audio) < self.n_samples:
+            audio = np.pad(audio, (0, self.n_samples - len(audio)))
+        else:
+            audio = audio[:self.n_samples]
+
+        mel = librosa.feature.melspectrogram(
+            y=audio, sr=self.sr, n_mels=self.n_mels, fmax=self.sr // 2
+        )
+        mel_db = librosa.power_to_db(mel, ref=np.max).astype(np.float32)
+        mel_tensor = torch.from_numpy(mel_db).unsqueeze(0)  # (1, n_mels, time)
+
+        scene_label = self.scene2idx[row['scene_label']]
+
+        # Parse device from filename: airport-barcelona-0-0-a.wav → 'a'
+        device = row['filename'].split('-')[-1].replace('.wav', '').lower()
+        device_label = self.device2idx.get(device, 0)
+
+        return mel_tensor, scene_label, device_label, audio
