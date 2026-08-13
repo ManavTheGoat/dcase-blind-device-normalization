@@ -60,14 +60,15 @@ class FreqAttn(nn.Module):
 
     def forward(self, x):
         # x: (B, 1, F, T)
+        # Device frequency response is time-invariant: average over time,
+        # compute per-frequency correction once, broadcast back over T.
         B, C, F, T = x.shape
-        # Process each time frame: reshape to (B*T, F, 1)
-        xt = x.squeeze(1).permute(0, 2, 1).reshape(B * T, F, 1)  # (B*T, F, 1)
-        h  = self.input_proj(xt) + self.pos_embed                  # (B*T, F, d_model)
+        x_avg = x.mean(dim=-1).squeeze(1).unsqueeze(-1)  # (B, F, 1)
+        h = self.input_proj(x_avg) + self.pos_embed       # (B, F, d_model)
         for layer in self.layers:
             h = layer(h)
-        h = self.output_proj(self.norm_out(h))                      # (B*T, F, 1)
-        correction = h.reshape(B, T, F, 1).squeeze(-1).permute(0, 2, 1).unsqueeze(1)  # (B,1,F,T)
+        correction = self.output_proj(self.norm_out(h))   # (B, F, 1)
+        correction = correction.unsqueeze(1).expand(-1, 1, -1, T)  # (B,1,F,T)
         return x + correction
 
     def count_parameters(self):

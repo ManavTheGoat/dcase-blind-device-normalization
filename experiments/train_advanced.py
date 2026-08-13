@@ -21,7 +21,7 @@ CACHE_DIR    = 'data/mel_cache'
 TRAIN_CSV    = os.path.join(DATASET_ROOT, 'evaluation_setup/fold1_train.csv')
 VAL_CSV      = os.path.join(DATASET_ROOT, 'evaluation_setup/fold1_evaluate.csv')
 DEVICE       = 'cuda' if torch.cuda.is_available() else 'cpu'
-BATCH_SIZE   = 512
+BATCH_SIZE   = 128
 EPOCHS       = 50
 SCENE_NAMES  = ['airport','bus','metro','metro_station','park',
                 'public_square','shopping_mall','street_pedestrian','street_traffic','tram']
