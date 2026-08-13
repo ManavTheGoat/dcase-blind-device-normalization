@@ -69,11 +69,11 @@ def run_freqattn():
                       num_workers=8, pin_memory=True, persistent_workers=True)
 
     opt_fa = torch.optim.Adam(freqattn.parameters(), lr=1e-3)
-    sch_fa = torch.optim.lr_scheduler.CosineAnnealingLR(opt_fa, T_max=20)
+    sch_fa = torch.optim.lr_scheduler.CosineAnnealingLR(opt_fa, T_max=EPOCHS)
     l1     = nn.L1Loss()
     best_l1 = float('inf')
     print("\n[Phase 1] Training FreqAttn normalizer ...")
-    for epoch in range(1, 21):
+    for epoch in range(1, EPOCHS+1):
         freqattn.train(); tl = 0.0
         for mel_si, mel_a, _ in tr_l:
             mel_si, mel_a = mel_si.to(DEVICE), mel_a.to(DEVICE)
