@@ -54,3 +54,39 @@ class CPMobile(nn.Module):
 
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+
+class CPMobileWide(nn.Module):
+    """
+    Wider CPMobile using the full 128K parameter budget.
+
+    With bc=40: ~93K params. Combined with frozen FreqAttn (21K) = 115K total.
+    Adds one extra DS block and a bottleneck FC head with dropout.
+    """
+
+    def __init__(self, n_classes=10, bc=40):
+        super().__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(1, bc, 3, padding=1, bias=False),
+            nn.BatchNorm2d(bc),
+            nn.ReLU(inplace=True),
+            DepthwiseSeparableConv(bc,   bc*2, stride=2),
+            DepthwiseSeparableConv(bc*2, bc*2, stride=2),
+            DepthwiseSeparableConv(bc*2, bc*4, stride=2),
+            DepthwiseSeparableConv(bc*4, bc*4, stride=2),
+            DepthwiseSeparableConv(bc*4, bc*4, stride=2),
+        )
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.classifier = nn.Sequential(
+            nn.Linear(bc*4, bc*2),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(bc*2, n_classes),
+        )
+
+    def forward(self, x):
+        x = self.pool(self.features(x)).squeeze(-1).squeeze(-1)
+        return self.classifier(x)
+
+    def count_parameters(self):
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
