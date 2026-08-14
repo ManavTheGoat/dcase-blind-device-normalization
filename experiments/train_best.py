@@ -45,7 +45,7 @@ def main():
     if torch.cuda.is_available():
         print(f"GPU:    {torch.cuda.get_device_name(0)}")
     print("\n" + "═"*58)
-    print(" FreqAttn + CPMobile  +  FMS + Mixup + SpecAugment")
+    print(" FreqAttn + CPMobile  +  Mixup")
     print("═"*58)
 
     freqattn   = FreqAttn(n_mels=128, d_model=32, n_heads=4, n_layers=2).to(DEVICE)
@@ -74,7 +74,6 @@ def main():
         freqattn.train(); tl = 0.0
         for mel_si, mel_a, _ in tr_l:
             mel_si, mel_a = mel_si.to(DEVICE), mel_a.to(DEVICE)
-            mel_si = freq_mixstyle(mel_si, p=0.5, alpha=0.1)
             opt_fa.zero_grad()
             loss = l1(freqattn(mel_si), mel_a)
             loss.backward(); opt_fa.step()
@@ -106,13 +105,11 @@ def main():
     best_acc, log = 0.0, []
     all_preds, all_labels = [], []
 
-    print(f"\n[Phase 2] CPMobile — {EPOCHS_P2} epochs  (FMS → SpecAug → FreqAttn → Mixup)")
+    print(f"\n[Phase 2] CPMobile — {EPOCHS_P2} epochs  (FreqAttn → Mixup only)")
     for epoch in range(1, EPOCHS_P2 + 1):
         classifier.train(); correct, total_n = 0, 0
         for mel, scene_lbl, _, _ in train_loader:
             mel, scene_lbl = mel.to(DEVICE), scene_lbl.to(DEVICE)
-            mel = freq_mixstyle(mel, p=0.5, alpha=0.1)
-            mel = spec_augment(mel, freq_mask=20, time_mask=20)
             with torch.no_grad():
                 mel = freqattn(mel)
             mel, ya, yb, lam = mixup_batch(mel, scene_lbl, alpha=0.2)
